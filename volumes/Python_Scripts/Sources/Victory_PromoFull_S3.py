@@ -1,22 +1,19 @@
 import requests
 from bs4 import BeautifulSoup
-import boto3
 import io
 import time
 import re
-import os
+import Functions as fn
 
 BASE_URL = "https://laibcatalog.co.il/"
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-S3_BUCKET = "naya-finalproject-sources" 
-S3_PREFIX = "victory-promofull-gz/"
+S3_BUCKET = fn.get_bucket_name()
+date_prefix = fn.get_date_prefix()
 
 date_str = time.strftime("%Y%m%d")
-pattern = rf".*PromoFull\d+-(\d{{3}})-{date_str}.*?\.xml\.gz$"
+search_word = "PromoFull"
+pattern = rf".*{search_word}(\d+)-(\d{{3}})-{date_str}.*?\.xml\.gz$"
 
-date_prefix = time.strftime("%Y-%m-%d/")
 
 # Fetch the HTML page
 html = requests.get(BASE_URL, timeout=20)
@@ -30,31 +27,23 @@ PromoFull_links = []
 for a in links:
     href = a["href"]
     reg = re.match(pattern, href, re.IGNORECASE)
-    # if "PromoFull" in href:
-    #     print("reg: ", reg)
-    #     print("href: ", href)
     if reg:
         full_url = href if href.startswith("http") else BASE_URL + href.lstrip("/")
         PromoFull_links.append(full_url)
 
-# print("Found PromoFull files:")
-# for link in PromoFull_links:
-#     print(" -", link)
-
 # S3 client
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-)
+s3 = fn.get_s3()
+chains = fn.get_chains(s3)
 
 counter = 0
 print("Uploading files to S3...")
 # Upload each PromoFull file to S3
 for url in PromoFull_links:
     filename = url.split("/")[-1]
-    branch = re.match(pattern, url, re.IGNORECASE).group(1)
-    s3_key = f"{date_prefix}{S3_PREFIX}{branch}/{filename}"
+    chain_id = re.match(pattern, url, re.IGNORECASE).group(1)
+    chain_name = fn.get_chain_name(chain_id, chains)
+    branch_id = re.match(pattern, url, re.IGNORECASE).group(2)
+    s3_key = f"{date_prefix}{search_word}/{chain_name}/{branch_id}/{filename}"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     with io.BytesIO(r.content) as f:
@@ -62,7 +51,8 @@ for url in PromoFull_links:
     counter += 1
     #print(f"Uploaded Victory branch #{branch} to S3.")
 
-print("\n\n")
+# Summary
+print("\n" + "="*70)
 print(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
-print(f">>>>>>>✔ Total uploaded files to '{S3_PREFIX}': {counter}")
-print("\n\n")
+print(f">>>>>>>✔ Total uploaded files: {counter}")
+print("="*70)

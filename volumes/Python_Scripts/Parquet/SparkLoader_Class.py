@@ -7,6 +7,7 @@ import os
 AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+today_prefix = time.strftime("%Y-%m-%d")
 
 class SparkLoader:
     def __init__(self, num_cores="*"):
@@ -34,10 +35,6 @@ class SparkLoader:
         # Set log level to reduce verbosity (options: ALL, DEBUG, INFO, WARN, ERROR, FATAL, OFF)
         self.spark.sparkContext.setLogLevel("WARN")
         
-        # Ignore corrupt inputs at SQL layer to skip bad .gz files
-        self.spark.conf.set("spark.sql.files.ignoreCorruptFiles", "true")
-        self.spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
-
         return None
 
     def get_chain_store_mapping(self, bucket_name="naya-finalproject-sources", prefix="Chains.csv"):
@@ -45,16 +42,16 @@ class SparkLoader:
         chains_df = self.spark.read.csv(s3_source_path, header=True, inferSchema=True)
         return chains_df
 
-    def load_xml(self, bucket_name, prefix, row_tag, header_tag, schema=None, header_schema=None, history=False, partitions=None):
-        
+    def load_xml(self, bucket_name, chain, df, row_tag, schema=None, history=False, partitions=None):
+        print("\n\n", f">>> Starting loading XML data for {df} - {chain}...")
         if history:
-            s3_source_path = f"s3a://{bucket_name}/*/{prefix}" # read historical data
+            s3_source_path = f"s3a://{bucket_name}/*/{df}/{chain}/**/*.gz" # read historical data
         else:
-            today_prefix = time.strftime("%Y-%m-%d")
-            s3_source_path = f"s3a://{bucket_name}/{today_prefix}/{prefix}/**/*.gz"
+            s3_source_path = f"s3a://{bucket_name}/{today_prefix}/{df}/{chain}/**/*.gz"
+            # s3_source_path = f"s3a://{bucket_name}/{today_prefix}/{df}/{chain}/*/*.gz"
 
         if partitions is not None:
-            df = (
+            df_spark = (
                 self.spark
                     .read
                     .format("com.databricks.spark.xml")
@@ -68,7 +65,7 @@ class SparkLoader:
                     .coalesce(partitions)  # reduce partitions early
             )
         else:
-            df = (
+            df_spark = (
                 self.spark
                     .read
                     .format("com.databricks.spark.xml")
@@ -80,42 +77,40 @@ class SparkLoader:
                     .schema(schema)
                     .load(s3_source_path)
             )
-        
-        root_meta = (
-                self.spark
-                .read
-                .format("com.databricks.spark.xml")
-                .option("rowTag", header_tag)
-                .option("recursiveFileLookup", "true")
-                .option("ignoreNamespace", "true")
-                .schema(header_schema)
-                .load(s3_source_path)
-                .select(
-                    F.input_file_name().cast(T.StringType()).alias("src"),
-                    F.col("ChainId").cast(T.StringType()).alias("ChainID"),
-                    F.col("StoreId").cast(T.StringType()).alias("StoreID"),
-                )
-                .dropDuplicates(["ChainID", "StoreID", "src"])
-                .withColumn("KeyDate", F.regexp_extract(F.col("src"), r"(\d{4}-\d{2}-\d{2})", 1))
-        )
+        # print(">>>>>>Before join with Chains.csv:")
+        # df_spark.show(5, truncate=False)
 
-        # root_meta.show(5, truncate=False)
         s3_chains_path = f"s3a://{bucket_name}/chains/Chains.csv"
         chains_df = self.spark.read.csv(s3_chains_path, header=True, inferSchema=True)
+        # print(">>>>>>Chains.csv:")
         # chains_df.show(10, truncate=False)
         
-        # join meta
-        df = (
-            df
+        # join chain names
+        df_spark = (
+            df_spark
             .withColumn("src", F.input_file_name())
-            .join(F.broadcast(root_meta), on="src", how="inner")
+            .withColumn("StoreID", F.regexp_extract(F.col("src"), rf"{df}\d+(?:-\d+)?-(\d{{3,4}})-", 1))
+            .withColumn("KeyDate", F.regexp_extract(F.col("src"), r"/(\d{4}-\d{2}-\d{2})/", 1))
+            .withColumn("ChainID", F.regexp_extract(F.col("src"), rf"{df}(\d+)-", 1))
             .join(F.broadcast(chains_df), on="ChainID", how="inner")
-            .drop("src")
         )
-
+        
+        # print(">>>>>>Post join with Chains.csv:")
+        # df_spark.show(5, truncate=False)
+        
         # store for downstream methods
-        self.df = df
-        return df
+        if df == "PromoFull":
+            self.df_PromoFull = df_spark
+            # print(">>>>>>self.df_PromoFull:")
+            # self.df_PromoFull.show(5, truncate=False)
+        elif df == "PriceFull":
+            self.df_PriceFull = df_spark
+            # print(">>>>>>self.df_PriceFull:")
+            # self.df_PriceFull.show(5, truncate=False)
+        else:
+            self.df = df_spark
+        
+        return df_spark
 
     def load_PromotionDetails(self, nested_count=True, bucket_name="naya-finalproject-processed", prefix="PromotionDetails"):
         
@@ -125,12 +120,12 @@ class SparkLoader:
             # build details DF
             if nested_count:
                 df_PromotionDetails = (
-                    self.df
+                    self.df_PromoFull
                     .withColumn("NumOfProducts", F.col("PromotionItems._Count").cast(T.IntegerType()))
                 )
             else:
                 df_PromotionDetails = (
-                    self.df
+                    self.df_PromoFull
                     .groupBy("ChainID", "ChainNameHeb", "ChainNameEng", "StoreID",
                             "PromotionID", "PromotionDescription",
                             "PromotionStartDate", "PromotionEndDate", "MinQty", "MaxQty",
@@ -147,7 +142,7 @@ class SparkLoader:
                     F.col("ChainID").cast(T.StringType()).alias("ChainID"),
                     F.col("ChainNameHeb").cast(T.StringType()).alias("ChainNameHeb"),
                     F.col("ChainNameEng").cast(T.StringType()).alias("ChainNameEng"),
-                    F.lpad(F.col("StoreID").cast(T.StringType()), 3, "0").alias("StoreID"),
+                    F.col("StoreID").cast(T.StringType()).alias("StoreID"),
                     F.col("PromotionId").cast(T.StringType()).alias("PromotionID"),
                     F.col("PromotionDescription").cast(T.StringType()).alias("PromotionDescription"),
                     F.to_date(F.col("PromotionStartDate")).cast(T.DateType()).alias("PromotionStartDate"),
@@ -172,13 +167,34 @@ class SparkLoader:
                 .dropDuplicates()
                 .collect()
             )
+            
             for row in pairs:
                 key_date = row["KeyDate"]
                 chain_prefix = row["ChainPrefix"]
-                out_path = f"{base_path}/{key_date}/{chain_prefix}"
-                subset = df_PromotionDetails.filter((F.col("KeyDate") == key_date) & (F.col("ChainPrefix") == chain_prefix))
-                print(f"Writing PromotionDetails to: {out_path}")
+                out_path = f"{base_path}/KeyDate={key_date}/ChainPrefix={chain_prefix}"
+                
+                subset = (
+                    df_PromotionDetails
+                    .filter((F.col("KeyDate") == key_date) & (F.col("ChainPrefix") == chain_prefix))
+                    .select(
+                        F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                        F.col("ChainNameHeb").cast(T.StringType()).alias("ChainNameHeb"),
+                        F.col("ChainNameEng").cast(T.StringType()).alias("ChainNameEng"),
+                        F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                        F.col("PromotionId").cast(T.StringType()).alias("PromotionID"),
+                        F.col("PromotionDescription").cast(T.StringType()).alias("PromotionDescription"),
+                        F.to_date(F.col("PromotionStartDate")).cast(T.DateType()).alias("PromotionStartDate"),
+                        F.to_date(F.col("PromotionEndDate")).cast(T.DateType()).alias("PromotionEndDate"),
+                        F.col("MinQty").cast(T.IntegerType()).alias("MinQty"),
+                        F.col("MaxQty").cast(T.IntegerType()).alias("MaxQty"),
+                        F.when(F.col("DiscountRate")>=100, F.col("DiscountRate")/10000).otherwise(F.col("DiscountRate")).cast(T.DoubleType()).alias("DiscountRate"),
+                        F.col("DiscountedPrice").cast(T.DoubleType()).alias("DiscountedPrice"),
+                        F.col("NumOfProducts").cast(T.IntegerType()).alias("NumOfProducts")
+                    )
+                )
+                
                 subset.write.mode("overwrite").parquet(out_path)
+            
             print(f">>>{base_path} written successfully.")
         except Exception as e:
             raise Exception(f"Error in load_PromotionDetails: {e}")
@@ -190,48 +206,94 @@ class SparkLoader:
         try:
             base_path = f"s3a://{bucket_name}/{prefix}"
             if explode:
-                df_items = (
-                    self.df
+                df_PromotionItems = (
+                    self.df_PromoFull
                     .select(
-                        F.col("PromotionId").alias("PromotionID"),
+                        F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                        F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                        F.col("PromotionId").cast(T.StringType()).alias("PromotionID"),
                         F.explode_outer(F.col("PromotionItems.Item")).alias("Item"),
                         F.col("ChainPrefix").cast(T.StringType()).alias("ChainPrefix"),
                         F.col("KeyDate").cast(T.StringType()).alias("KeyDate")
                     )
                     .select(
-                    F.col("PromotionID").cast(T.StringType()).alias("PromotionID"),
-                    F.col("Item.ItemCode").cast(T.StringType()).alias("ItemCode"),
-                    F.col("ChainPrefix").cast(T.StringType()).alias("ChainPrefix"), 
-                    F.col("KeyDate").cast(T.StringType()).alias("KeyDate")
+                        F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                        F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                        F.col("PromotionId").cast(T.StringType()).alias("PromotionID"),
+                        F.col("Item.ItemCode").cast(T.StringType()).alias("ItemCode"),
+                        F.col("ChainPrefix").cast(T.StringType()).alias("ChainPrefix"), 
+                        F.col("KeyDate").cast(T.StringType()).alias("KeyDate")
                     )
-                    .dropDuplicates(["PromotionID", "ItemCode", "ChainPrefix", "KeyDate"])
+                    # .dropDuplicates(["ChainID", "StoreID", "PromotionID", "ItemCode", "ChainPrefix", "KeyDate"])
                 )
             else:
-                df_items = (
-                    self.df
+                df_PromotionItems = (
+                    self.df_PromoFull
                     .select(
+                        F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                        F.col("StoreID").cast(T.StringType()).alias("StoreID"),
                         F.col("PromotionId").cast(T.StringType()).alias("PromotionID"),
                         F.col("ItemCode").cast(T.StringType()).alias("ItemCode"),
                         F.col("ChainPrefix").cast(T.StringType()).alias("ChainPrefix"),
                         F.col("KeyDate").cast(T.StringType()).alias("KeyDate")
                     )
-                    .dropDuplicates(["PromotionID", "ItemCode", "ChainPrefix", "KeyDate"])
+                    # .dropDuplicates(["ChainID", "StoreID", "PromotionID", "ItemCode", "ChainPrefix", "KeyDate"])
                 )
+            # print(">>>>>>df_PromotionItems:")
+            # df_PromotionItems.show(5, truncate=False)
 
             # write per (KeyDate, ChainID)
             pairs = (
-                df_items
+                df_PromotionItems
                 .select("KeyDate", "ChainPrefix")
                 .dropDuplicates()
                 .collect()
             )
+            
+            df_PromotionItems = (
+                df_PromotionItems
+                .join(
+                    self.df_PriceFull
+                    .select(
+                            F.col("ItemCode").cast(T.StringType()).alias("ItemCode"),
+                            F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                            F.col("ItemPrice").cast(T.DoubleType()).alias("ItemPrice")
+                            ),
+                     on=["ItemCode", "StoreID"],
+                     how="inner"
+                    )
+                .select(
+                    F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                    F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                    F.col("PromotionID").cast(T.StringType()).alias("PromotionID"),
+                    F.col("ItemCode").cast(T.StringType()).alias("ItemCode"),
+                    F.col("ItemPrice").cast(T.DoubleType()).alias("ItemPrice"),
+                    F.col("ChainPrefix").cast(T.StringType()).alias("ChainPrefix"),
+                    F.col("KeyDate").cast(T.StringType()).alias("KeyDate")
+                )
+            )
+            # print(">>>>>>df_PromotionItems after join with PriceFull:")
+            # df_PromotionItems.show(5, truncate=False)
+            
             for row in pairs:
                 key_date = row["KeyDate"]
                 chain_prefix = row["ChainPrefix"]
-                out_path = f"{base_path}/{key_date}/{chain_prefix}"
-                subset = df_items.filter((F.col("KeyDate") == key_date) & (F.col("ChainPrefix") == chain_prefix))
-                print(f"Writing PromotionItems to: {out_path}")
+                out_path = f"{base_path}/KeyDate={key_date}/ChainPrefix={chain_prefix}"
+                
+                subset = (
+                    df_PromotionItems
+                    .filter((F.col("KeyDate") == key_date) & (F.col("ChainPrefix") == chain_prefix))
+                    .select(
+                        F.col("ChainID").cast(T.StringType()).alias("ChainID"),
+                        F.col("StoreID").cast(T.StringType()).alias("StoreID"),
+                        F.col("PromotionID").cast(T.StringType()).alias("PromotionID"),
+                        F.col("ItemCode").cast(T.StringType()).alias("ItemCode"),
+                        F.col("ItemPrice").cast(T.DoubleType()).alias("ItemPrice")
+                    )
+                )
+                subset.show(5, truncate=False)
                 subset.write.mode("overwrite").parquet(out_path)
+            
             print(f">>>{base_path} written successfully.")
         
         except Exception as e:
@@ -239,6 +301,25 @@ class SparkLoader:
             return False
 
         return True
+
+    def enrich_items_dim(self):
+        try:
+            df_Items = ( 
+                    self.df_PriceFull
+                    .select(
+                        F.col("ItemCode").cast(T.StringType()).alias("ItemCode"),
+                        F.col("ItemName").cast(T.StringType()).alias("ItemName"),
+                        F.col("ManufacturerName").cast(T.StringType()).alias("ManufacturerName"),
+                        F.col("ManufactureCountry").cast(T.StringType()).alias("ManufactureCountry"),
+                        F.col("UnitQty").cast(T.StringType()).alias("UnitQty"),
+                        F.col("Quantity").cast(T.DoubleType()).alias("Quantity"),
+                        F.col("QtyInPackage").cast(T.StringType()).alias("QtyInPackage")
+                    ))
+            
+
+        except Exception as e:
+            print(f"Error in load_Items: {e}")
+            return False
 
     def stop_spark(self):
         self.spark.stop()

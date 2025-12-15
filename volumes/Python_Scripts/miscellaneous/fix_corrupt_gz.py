@@ -11,7 +11,6 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 date_prefix = time.strftime("%Y-%m-%d") + "/"
 
 S3_SOURCE_BUCKET = "naya-finalproject-sources"
-retailer_source_prefix = "ramilevi-promofull-gz/"
 
 # Pre-scan S3 for corrupt .gz files (wrong magic header) and log them
 s3_client = boto3.client(

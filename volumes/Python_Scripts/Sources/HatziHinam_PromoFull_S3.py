@@ -7,20 +7,19 @@ from selenium.webdriver.support import expected_conditions as EC
 import requests
 import re
 import time
-import boto3
 import io
-import os
+import Functions as fn
 
 BASE_URL = "https://shop.hazi-hinam.co.il/Prices"
 
 # === AWS Credentials ===
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-S3_BUCKET = "naya-finalproject-sources" 
+AWS_ACCESS_KEY_ID = fn.get_access_key()
+AWS_SECRET_ACCESS_KEY = fn.get_secret_key()
+S3_BUCKET = fn.get_bucket_name()
 S3_PREFIX = "hatzihinam-promofull-gz/"
 
 date_str = time.strftime("%Y%m%d")
-pattern = rf"(https?://[^'\"]+PromoFull\d+-\d{{3}}-(\d{{3}})-{date_str}.*?\.gz)"
+pattern = rf"(https?://[^'\"]+PromoFull(\d+)-\d{{3}}-(\d{{3}})-{date_str}.*?\.gz)"
 
 date_prefix = time.strftime("%Y-%m-%d/")
 
@@ -92,21 +91,18 @@ driver.quit()
 print(f"Total unique .gz files: {len(all_links)} in {page} pages.")
     
 # S3 client
-s3 = boto3.client(
-            "s3",
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        )
+s3 = fn.get_s3()
+chains = fn.get_chains(s3)
 counter = 0
 # Download each file
 for url in all_links:
     filename = url.split("/")[-1].split("?")[0]
-    #print(f"Downloading {filename}...")
-    
-        # Determine S3 key based on pattern
-    branch = re.match(pattern, url, re.IGNORECASE).group(2)
-    s3_key = f"{date_prefix}{S3_PREFIX}{branch}/{filename}"
-    
+    match = re.match(pattern, filename, re.IGNORECASE)
+    chain_id = match.group(2)
+    chain_name = fn.get_chain_name(chain_id, chains)
+    branch_id = match.group(3)
+    s3_key = f"{date_prefix}{chain_name}/{branch_id}/{filename}"
+
     with requests.get(url, timeout=30) as r:
         r.raise_for_status()
         

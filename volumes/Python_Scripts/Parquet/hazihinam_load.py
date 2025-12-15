@@ -36,21 +36,19 @@ schema = T.StructType([
     ]), True),
 ])
 
-# Read root metadata (uppercase tag names)
-header_schema = T.StructType([
-    T.StructField("ChainID", T.StringType(), True),
-    T.StructField("SubChainID", T.StringType(), True),
-    T.StructField("StoreID", T.StringType(), True),
-    T.StructField("BikoretNo", T.IntegerType(), True),
-])
+# # Read root metadata (uppercase tag names)
+# header_schema = T.StructType([
+#     T.StructField("ChainID", T.StringType(), True),
+#     T.StructField("SubChainID", T.StringType(), True),
+#     T.StructField("StoreID", T.StringType(), True),
+#     T.StructField("BikoretNo", T.IntegerType(), True),
+# ])
 
 spark = SC.SparkLoader()
 df = spark.load_xml(bucket_name="naya-finalproject-sources",
-                    prefix="hatzihinam-promofull-gz",
+                    prefix="hatzihinam",
                     row_tag="Promotion",
-                    header_tag="Root",
-                    schema=schema,
-                    header_schema=header_schema
+                    schema=schema
                 )
 spark.load_PromotionDetails(nested_count=False)
 spark.load_PromotionItems(explode=True)

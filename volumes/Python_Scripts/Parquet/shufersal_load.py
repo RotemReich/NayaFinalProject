@@ -19,7 +19,7 @@ clubs_schema = T.StructType([
     T.StructField("ClubId", T.IntegerType(), True),
 ])
 
-schema = T.StructType([
+promo_schema = T.StructType([
     T.StructField("PromotionId", T.StringType(), True),
     T.StructField("AllowMultipleDiscounts", T.IntegerType(), True),
     T.StructField("PromotionDescription", T.StringType(), True),
@@ -46,22 +46,40 @@ schema = T.StructType([
     T.StructField("Clubs", T.ArrayType(clubs_schema), True),
 ])
 
-# header schema
-header_schema = T.StructType([
-    T.StructField("ChainId", T.StringType(), True),
-    T.StructField("SubChainId", T.StringType(), True),
-    T.StructField("StoreId", T.StringType(), True),
-    T.StructField("BikoretNo", T.IntegerType(), True),
-    T.StructField("DllVerNo", T.StringType(), True)
+items_schema = T.StructType([
+    T.StructField("PriceUpdateDate", T.StringType(), True),
+    T.StructField("ItemCode", T.StringType(), True),
+    T.StructField("ItemType", T.IntegerType(), True),
+    T.StructField("ItemName", T.StringType(), True),
+    T.StructField("ManufacturerName", T.StringType(), True),
+    T.StructField("ManufactureCountry", T.StringType(), True),
+    T.StructField("ManufacturerItemDescription", T.StringType(), True),
+    T.StructField("UnitQty", T.StringType(), True),
+    T.StructField("Quantity", T.DoubleType(), True),
+    T.StructField("UnitOfMeasure", T.StringType(), True),
+    T.StructField("bIsWeighted", T.IntegerType(), True),
+    T.StructField("QtyInPackage", T.StringType(), True),
+    T.StructField("ItemPrice", T.DoubleType(), True),
+    T.StructField("UnitOfMeasurePrice", T.DoubleType(), True),
+    T.StructField("AllowDiscount", T.IntegerType(), True),
+    T.StructField("ItemStatus", T.IntegerType(), True),
+    T.StructField("ItemId", T.StringType(), True),
 ])
 
 spark = SC.SparkLoader()
-df = spark.load_xml(bucket_name="naya-finalproject-sources",
-                    prefix="shufersal-promofull-gz",
+df_PromoFull = spark.load_xml(bucket_name="naya-finalproject-sources",
+                    chain="shufersal",
+                    df="PromoFull",
                     row_tag="Promotion",
-                    header_tag="root",
-                    schema=schema,
-                    header_schema=header_schema)
+                    schema=promo_schema
+                    )
+
+df_items = spark.load_xml(bucket_name="naya-finalproject-sources",
+                    chain="shufersal",
+                    df="PriceFull",
+                    row_tag="Item",
+                    schema=items_schema
+                    )
 spark.load_PromotionDetails(nested_count=True)
 spark.load_PromotionItems(explode=True)
 spark.stop_spark()

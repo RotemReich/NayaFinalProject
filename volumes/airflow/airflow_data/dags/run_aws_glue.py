@@ -1,13 +1,7 @@
 from airflow.decorators import dag, task
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.utils.log.logging_mixin import LoggingMixin
-import subprocess
+import Base
 from datetime import datetime
-import time
-import os
 
-
-log = LoggingMixin().log
 
 @dag(
     dag_id = "run_aws_glue",
@@ -18,47 +12,40 @@ log = LoggingMixin().log
 )
 
 def run_aws_glue():
-    
-    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-    
-    def run_command(file, container):
-        base_cmd = f"docker exec"
-        container = "python_scripts"
-        python_path = "/usr/local/bin/python3.13"
-        path = "/home/developer/final_project/aws_glue/"
-        
-        if not aws_access_key or not aws_secret_key:
-            raise ValueError("Missing AWS credentials in environment")
-        else:
-            base_cmd += f" -e AWS_ACCESS_KEY_ID={aws_access_key} -e AWS_SECRET_ACCESS_KEY={aws_secret_key}"
-
-        command = f"{base_cmd} {container} {python_path} {path}{file}"
-              
-        try:
-            result = subprocess.run(command ,shell=True, check=True, capture_output=True, text=True)
-            log.info("STDOUT: %s", result.stdout)
-            log.info("STDERR: %s", result.stderr)
-            return f"'{file}' Script executed successfully"
-        except subprocess.CalledProcessError as e:
-            log.error("Error running '%s': returncode=%s", file, e.returncode)
-            log.error("STDOUT:\n%s", e.stdout)
-            log.error("STDERR:\n%s", e.stderr)
-            raise
-    
-    @task
-    def run_glue_job_JSON():
-        run_command("glue_job_JSON.py", "dev_env")
         
 
     @task
     def run_crawler_promotiondetails():
-        run_command("glue_crawler_PromotionDetails.py", "dev_env")
+        Base.run_command("glue_crawler_PromotionDetails.py", "glue")
+    @task
+    def run_crawler_promotionitems():
+        Base.run_command("glue_crawler_PromotionItems.py", "glue")
+        
+    @task
+    def run_crawler_stores():
+        Base.run_command("glue_crawler_stores.py", "glue")
 
+    # @task
+    # def run_glue_job_JSON():
+    #     Base.run_command("glue_job_JSON.py", "glue")
+
+    # @task
+    # def delete_json():
+    #     Base.delete_json_from_s3("naya-finalproject-json", "PromotionDetails_json/")
+        
+    @task
+    def run_spark_JSON():
+        Base.run_command("JSON_Upload.py", "JSON")
 
     (
-        run_glue_job_JSON()
-        >> run_crawler_promotiondetails()
+        run_crawler_promotiondetails()
+        >>
+        run_crawler_promotionitems()
+        >>
+        run_crawler_stores()
+        >>
+        # delete_json() >> run_glue_job_JSON()
+        run_spark_JSON()
     )
 
 

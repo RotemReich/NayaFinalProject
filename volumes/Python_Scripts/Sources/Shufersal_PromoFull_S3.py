@@ -4,32 +4,27 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import time
 import re
-import boto3
 import io
-import os
+import Functions as fn
 
 
 # === CONFIG ===
 BASE = "https://prices.shufersal.co.il/"
 
 # === AWS Credentials ===
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-S3_BUCKET = "naya-finalproject-sources" 
-S3_PREFIX = "shufersal-promofull-gz/"
+S3_BUCKET = fn.get_bucket_name()
 
 date_str = time.strftime("%Y%m%d")
-pattern = rf"(https?://[^'\"]+PromoFull\d+-(\d{{3}})-{date_str}.*?\.gz)"
+search_word = "PromoFull"
+cat_IDs = fn.shufersal_catIDs
+pattern = rf"(https?://[^'\"]+{search_word}(\d+)-(\d{{3}})-{date_str}.*?\.gz)"
 
-date_prefix = time.strftime("%Y-%m-%d/")
+date_prefix = fn.get_date_prefix()
 
 # Initialize S3 client once
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-)
- 
+s3 = fn.get_s3()
+chains = fn.get_chains(s3)
+
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 def extract_file_name(link):
@@ -48,7 +43,7 @@ def extract_promofull_hrefs(html):
             seen.add(m.group(0))
     return hrefs
  
-def scrape_category_and_download(catID='4', storeId='0'): # catID='4' for PromosFull
+def scrape_category_and_download(catID=cat_IDs[search_word], storeId="0"): # catID='4' for PromosFull
     page = 1
     counter = 0
     top_file: str = ""
@@ -75,14 +70,16 @@ def scrape_category_and_download(catID='4', storeId='0'): # catID='4' for Promos
             prev_top_file = top_file
         except Exception as e:
             print("Pagination end detection error:", e)
-        print(f"Page {page}: found {len(links)} PromoFull links for today files")
-        
+        print(f"Page {page}: found {len(links)} {search_word} links for today files")
+
         # filter only PromoFull blob links (the extractor already does that)
         for u in links:
-            reg_u = re.match(pattern, u)
-            #print(">>>>>>>>>> reg_u: ", reg_u.groups())
+            reg_u = re.match(pattern, u, re.IGNORECASE)
+            chain_id = reg_u.group(2)
+            chain_name = fn.get_chain_name(chain_id, chains)
+            branch_id = reg_u.group(3)
             filename = extract_file_name(u)
-            s3_key = f"{date_prefix}{S3_PREFIX}{reg_u.group(2)}/{filename}"
+            s3_key = f"{date_prefix}{search_word}/{chain_name}/{branch_id}/{filename}"
             # print(f"Uploading -> s3://{S3_BUCKET}/{s3_key}")
             try:
                 with requests.get(u, headers=HEADERS, timeout=60) as r:
@@ -101,15 +98,16 @@ def scrape_category_and_download(catID='4', storeId='0'): # catID='4' for Promos
         print("Uploaded count so far: ", counter)
         page += 1
     
-    print("\n")
+    # Summary
+    print("\n" + "="*70)
     print(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
-    print(f">>>>>>>✔ Total uploaded files to '{S3_PREFIX}': {counter}")
-    print("\n\n")
+    print(f">>>>>>>✔ Total uploaded: {counter}")
+    print("="*70)
 
 
 def main():
-    p = argparse.ArgumentParser(description='Download Shufersal PromoFull files')
-    p.add_argument('--cat', default='4', help='category id (default 4 = PromosFull)')
+    p = argparse.ArgumentParser(description=f'Download Shufersal {search_word} files')
+    p.add_argument('--cat', default=cat_IDs[search_word], help=f"category id (default {cat_IDs[search_word]} = {search_word})")
     p.add_argument('--store', default='0', help='store id (default 0 = all)')
     args = p.parse_args()
     scrape_category_and_download(catID=args.cat, storeId=args.store)

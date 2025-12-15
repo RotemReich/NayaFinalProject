@@ -7,11 +7,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
-import boto3
 import io
 import re
 import urllib3
-import os
+import Functions as fn
 
 # Suppress only the single InsecureRequestWarning from urllib3 needed.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -35,21 +34,13 @@ driver = webdriver.Chrome(options=chrome_options)
 
 # === AWS Credentials ===
 # Use environment variables injected by Docker Compose. Do NOT hardcode secrets.
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-S3_BUCKET = "naya-finalproject-sources" 
-S3_PREFIX = "ramilevi-pricefull-gz/"
-
-# Validate creds early
-if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
-    raise RuntimeError("Missing AWS credentials in environment")
+S3_BUCKET = fn.get_bucket_name()
+date_prefix = fn.get_date_prefix()
 
 date_str = time.strftime("%Y%m%d")
-pattern = rf".*PriceFull\d+-(\d{{3}})-{date_str}.*?\.gz$"
+search_word = "PromoFull"
+pattern = rf".*{search_word}(\d+)-(\d{{3}})-{date_str}.*?\.gz$"
 
-date_prefix = time.strftime("%Y-%m-%d/")
-
-search_word = "PriceFull"
 
 try:
     # Open login page
@@ -147,11 +138,8 @@ try:
         driver = None
     
     # S3 client
-    s3 = boto3.client(
-                "s3",
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            )
+    s3 = fn.get_s3()
+    chains = fn.get_chains(s3)
     
     counter = 0
     skipped = 0
@@ -180,14 +168,19 @@ try:
         raise last_err
     
     for url in gz_links:
+        
+        #== Build S3 key
         filename = url.split("/")[-1].split("?")[0]
         m = re.match(pattern, filename, re.IGNORECASE)
         if not m:
             skipped += 1
             continue
-        
-        store_id = m.group(1)
-        s3_key = f"Prices/{S3_PREFIX}{store_id}/{filename}"
+        chain_id = m.group(1)
+        chain_name = fn.get_chain_name(chain_id, chains)
+        branch_id = m.group(2)
+        s3_key = f"{date_prefix}{search_word}/{chain_name}/{branch_id}/{filename}"
+
+        #== Upload to S3
         try:
             r = _http_get_with_retry(session, url)
             # Skip HTML responses (auth pages, errors)
@@ -221,11 +214,12 @@ try:
         except Exception as e:
             print(f"Failed to upload {filename}: {e}")
 finally:
-    print("\n\n")
+    print("\n" + "="*70)
     print(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
-    print(f">>>>>>>✔ Total uploaded files to '{S3_PREFIX}': {counter}")
+    print(f">>>>>>>✔ Total uploaded files: {counter}")
     print(f">>>>>>>✔ Total skipped files: {skipped}")
-    print("\n\n")
+    print("="*70)
+    
     try:
         if 'driver' in locals() and driver is not None:
             driver.quit()

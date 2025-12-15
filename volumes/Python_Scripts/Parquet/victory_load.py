@@ -1,7 +1,7 @@
 import SparkLoader_Class as SC
 import pyspark.sql.types as T
 
-schema = T.StructType([
+promo_schema = T.StructType([
     T.StructField("AdditionalRestrictions", T.StringType(), True),
     T.StructField("AdditionalsCoupon", T.StringType(), True),
     T.StructField("AdditionalsGiftCount", T.DoubleType(), True),
@@ -31,20 +31,41 @@ schema = T.StructType([
     T.StructField("RewardType", T.LongType(), True),
 ])
 
-header_schema = T.StructType([
-    T.StructField("ChainID", T.StringType(), True),
-    T.StructField("SubChainID", T.StringType(), True),
-    T.StructField("StoreID", T.StringType(), True),
-    T.StructField("BikoretNo", T.StringType(), True)
+items_schema = T.StructType([
+    T.StructField("PriceUpdateDate", T.StringType(), True),
+    T.StructField("ItemCode", T.StringType(), True),
+    T.StructField("ItemType", T.IntegerType(), True),
+    T.StructField("ItemName", T.StringType(), True),
+    T.StructField("ManufactureName", T.StringType(), True),
+    T.StructField("ManufactureCountry", T.StringType(), True),
+    T.StructField("ManufactureItemDescription", T.StringType(), True),
+    T.StructField("UnitQty", T.StringType(), True),
+    T.StructField("Quantity", T.DoubleType(), True),
+    T.StructField("UnitMeasure", T.StringType(), True),
+    T.StructField("BisWeighted", T.IntegerType(), True),
+    T.StructField("QtyInPackage", T.StringType(), True),
+    T.StructField("ItemPrice", T.DoubleType(), True),
+    T.StructField("UnitOfMeasurePrice", T.DoubleType(), True),
+    T.StructField("AllowDiscount", T.IntegerType(), True),
+    T.StructField("itemStatus", T.IntegerType(), True),
+    T.StructField("LastUpdateDate", T.StringType(), True),
+    T.StructField("LastUpdateTime", T.StringType(), True),
 ])
 
 spark = SC.SparkLoader()
-df = spark.load_xml(bucket_name="naya-finalproject-sources",
-                    prefix="victory-promofull-gz",
+df_PromoFull = spark.load_xml(bucket_name="naya-finalproject-sources",
+                    chain="victory",
+                    df="PromoFull",
                     row_tag="Sale",
-                    header_tag="Promos",
-                    schema=schema,
-                    header_schema=header_schema)
+                    schema=promo_schema
+                    )
+
+df_items = spark.load_xml(bucket_name="naya-finalproject-sources",
+                    chain="victory",
+                    df="PriceFull",
+                    row_tag="Product",
+                    schema=items_schema
+                    )
 spark.load_PromotionDetails(nested_count=False)
 spark.load_PromotionItems(explode=False)
 spark.stop_spark()
