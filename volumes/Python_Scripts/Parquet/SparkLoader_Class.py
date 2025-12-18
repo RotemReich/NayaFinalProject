@@ -138,6 +138,12 @@ class SparkLoader:
             
             df_PromotionDetails = (
                 df_PromotionDetails
+                .withColumn("DiscountRate_calc",
+                            F.when(F.col("DiscountRate")>=100, F.col("DiscountRate")/10000)
+                            .when(F.col("DiscountRate")<0, F.lit(None))
+                            .otherwise(F.col("DiscountRate"))
+                        .cast(T.DoubleType())
+                )
                 .select(
                     F.col("ChainID").cast(T.StringType()).alias("ChainID"),
                     F.col("ChainNameHeb").cast(T.StringType()).alias("ChainNameHeb"),
@@ -149,7 +155,7 @@ class SparkLoader:
                     F.to_date(F.col("PromotionEndDate")).cast(T.DateType()).alias("PromotionEndDate"),
                     F.col("MinQty").cast(T.IntegerType()).alias("MinQty"),
                     F.col("MaxQty").cast(T.IntegerType()).alias("MaxQty"),
-                    F.col("DiscountRate").cast(T.DoubleType()).alias("DiscountRate"),
+                    F.col("DiscountRate_calc").cast(T.DoubleType()).alias("DiscountRate"),
                     F.col("DiscountedPrice").cast(T.DoubleType()).alias("DiscountedPrice"),
                     F.col("NumOfProducts").cast(T.IntegerType()).alias("NumOfProducts"),
                     F.col("KeyDate").cast(T.StringType()).alias("KeyDate"),
@@ -187,7 +193,7 @@ class SparkLoader:
                         F.to_date(F.col("PromotionEndDate")).cast(T.DateType()).alias("PromotionEndDate"),
                         F.col("MinQty").cast(T.IntegerType()).alias("MinQty"),
                         F.col("MaxQty").cast(T.IntegerType()).alias("MaxQty"),
-                        F.when(F.col("DiscountRate")>=100, F.col("DiscountRate")/10000).otherwise(F.col("DiscountRate")).cast(T.DoubleType()).alias("DiscountRate"),
+                        F.col("DiscountRate").cast(T.DoubleType()).alias("DiscountRate"),
                         F.col("DiscountedPrice").cast(T.DoubleType()).alias("DiscountedPrice"),
                         F.col("NumOfProducts").cast(T.IntegerType()).alias("NumOfProducts")
                     )

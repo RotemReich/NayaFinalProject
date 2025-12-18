@@ -54,10 +54,10 @@ def transfer_to_parquet():
     def wait_30_seconds_post_mahsaneihashuk():
         Base.wait_command(30)
 
-    Base.ensure_dag_unpaused("run_aws_glue")
-    run_aws_glue_dag = TriggerDagRunOperator(
-        task_id="run_aws_glue",
-        trigger_dag_id="run_aws_glue",
+    Base.ensure_dag_unpaused("Crawlers_JSON")
+    Crawlers_JSON_dag = TriggerDagRunOperator(
+        task_id="Crawlers_JSON",
+        trigger_dag_id="Crawlers_JSON",
         conf={"key": "value"},
         wait_for_completion=False,
         reset_dag_run=True,
@@ -75,7 +75,7 @@ def transfer_to_parquet():
     >>
     load_mahsaneihashuk_to_parquet() >> wait_30_seconds_post_mahsaneihashuk()
     >>
-    run_aws_glue_dag
+    Crawlers_JSON_dag
     )
 
 

@@ -124,18 +124,21 @@ df = (
     PromotionDetails_df
     .join(PromotionItems_agg_df, (PromotionDetails_df["ChainID"] == PromotionItems_agg_df["ChainID"]) &
                                    (PromotionDetails_df["StoreID"] == PromotionItems_agg_df["StoreID"]) &
-                                   (PromotionDetails_df["PromotionID"] == PromotionItems_agg_df["PromotionId"]), how="inner")
+                                   (PromotionDetails_df["PromotionID"] == PromotionItems_agg_df["PromotionId"]),
+                                   how="inner")
     .join(Stores_df, on=["ChainID", "StoreID"], how="left")
     .withColumn("DiscountRate_calc",
-                F.when(PromotionDetails_df["DiscountRate"]<=1, PromotionDetails_df["DiscountRate"])
-                .otherwise(PromotionDetails_df["DiscountedPrice"]/(F.col("AvgItemPrice")*PromotionDetails_df["MinQty"])).cast(T.DoubleType())
+                F.when(PromotionDetails_df["DiscountRate"]<1, PromotionDetails_df["DiscountRate"])
+                .when((PromotionDetails_df["DiscountRate"]>=1) & (PromotionDetails_df["DiscountedPrice"].isNull()), 1 - (PromotionDetails_df["DiscountRate"]/(F.col("AvgItemPrice")*PromotionDetails_df["MinQty"])))
+                .otherwise(1 - (PromotionDetails_df["DiscountedPrice"]/(F.col("AvgItemPrice")*PromotionDetails_df["MinQty"])))
+                .cast(T.DoubleType())
     )
     .withColumn("DiscountedPrice_calc",
-                F.when(PromotionDetails_df["DiscountedPrice"].isNull(), F.col("DiscountRate_calc")*F.col("AvgItemPrice"))
+                F.when(PromotionDetails_df["DiscountedPrice"].isNull(), F.col("DiscountRate_calc")*F.col("AvgItemPrice")*PromotionDetails_df["MinQty"])
                 .otherwise(PromotionDetails_df["DiscountedPrice"]).cast(T.DoubleType())
     )
     .withColumn("MagicNumber",
-                ((F.col("AvgItemPrice")*F.lit(3)/PromotionDetails_df["MinQty"])
+                ((3/PromotionDetails_df["MinQty"])
                 + (F.col("DiscountRate_calc")*5)
                 + F.col("DiscountedPrice_calc")
                 ).cast(T.DoubleType()))

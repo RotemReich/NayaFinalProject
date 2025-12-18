@@ -34,7 +34,7 @@ x-airflow-common:
 
   volumes:
     - ./volumes/airflow/airflow_data/dags:/opt/airflow/dags
-    - ./volumes/airflow/airflow_data/logs:/opt/airflow/logs
+    # - ./volumes/airflow/airflow_data/logs:/opt/airflow/logs
     - ./volumes/airflow/airflow_data/config:/opt/airflow/config
     - ./volumes/airflow/airflow_data/plugins:/opt/airflow/plugins
     - /var/run/docker.sock:/var/run/docker.sock #Rotem Reich: Expose Docker socket on windows
@@ -126,14 +126,13 @@ services:
 
     python_scripts:
         container_name: python_scripts
-        image: python:3.13.3-slim # python:3.11-slim
+        image: python:3.13.3-slim
         ports:
             - "5500:5500"
-        # Install Chromium + Chromedriver + required deps for headless, tzdata for timezone, then Python requirements
         command: sh -c "apt-get update 
-                        && apt-get install -y --no-install-recommends chromium chromium-driver tzdata fonts-liberation libnss3 libgconf-2-4 libasound2 libxss1 wget ca-certificates
-                        && ln -sf /usr/share/zoneinfo/Asia/Jerusalem /etc/localtime && echo 'Asia/Jerusalem' > /etc/timezone && rm -rf /var/lib/apt/lists/*
-                        && pip install -r /home/requirements/requirements.txt && tail -f /dev/null"
+                  && apt-get install -y --no-install-recommends chromium chromium-driver tzdata fonts-liberation libnss3 libgconf-2-4 libasound2 libxss1 wget ca-certificates build-essential gcc \
+                  && ln -sf /usr/share/zoneinfo/Asia/Jerusalem /etc/localtime && echo 'Asia/Jerusalem' > /etc/timezone && rm -rf /var/lib/apt/lists/* \
+                  && pip install -r /home/requirements/requirements.txt && tail -f /dev/null"
         environment:
           <<: *env-common
         volumes:
@@ -159,6 +158,8 @@ services:
     #         - "9200:9200"
     #     environment:
     #         discovery.type: single-node
+    #     volumes:
+    #         - ./volumes/elasticsearch/data:/usr/share/elasticsearch/data
             
     # kibana:
     #     container_name: kibana
@@ -177,7 +178,8 @@ services:
           POSTGRES_PASSWORD: airflow
           POSTGRES_DB: airflow
         volumes:
-          - postgres-db-volume:/var/lib/postgresql/data
+          # - postgres-db-volume:/var/lib/postgresql/data
+          - ./volumes/postgres/data:/var/lib/postgresql/data
         healthcheck:
           test: ["CMD", "pg_isready", "-U", "airflow"]
           interval: 10s
@@ -356,5 +358,5 @@ services:
         - -c
         - airflow
 
-volumes:
-  postgres-db-volume:
+# volumes:
+#   postgres-db-volume:

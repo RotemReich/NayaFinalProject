@@ -54,7 +54,7 @@ def scrape_category_and_download(catID=cat_IDs[search_word], storeId='0'): # cat
         url = urljoin(BASE, 'FileObject/UpdateCategory')
         params = {'catID': str(catID), 'storeId': str(storeId), 'page': str(page)}
         #print(f"Fetching category grid: {url} params={params}")
-        r = requests.get(url, params=params, headers=HEADERS, timeout=30)
+        r = requests.get(url, params=params, headers=HEADERS, timeout=90)
         r.raise_for_status()
         html = r.text
 

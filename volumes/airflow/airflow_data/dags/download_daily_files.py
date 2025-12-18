@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 @dag(
     dag_id = "download_daily_files",
     start_date=datetime(2025, 1, 1),
-    schedule_interval=None,
+    # schedule_interval=None,
+    schedule_interval="0 1,13 * * *", # 01:00 and 13:00 every day
     catchup=False,
     tags=["Naya", "project", "final project", "Rotem Reich", "Yonatan Malihi", "Avi Yashar", "download"]
 )

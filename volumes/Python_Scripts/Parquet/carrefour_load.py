@@ -80,6 +80,6 @@ df_items = spark.load_xml(bucket_name="naya-finalproject-sources",
                     row_tag="Item",
                     schema=items_schema
                     )
-# spark.load_PromotionDetails(nested_count=False)
+spark.load_PromotionDetails(nested_count=False)
 spark.load_PromotionItems(explode=True)
 spark.stop_spark()

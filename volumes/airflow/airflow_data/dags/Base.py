@@ -34,6 +34,10 @@ def run_command(file, process):
         container = "dev_env"
         python_path = "/usr/bin/python3"
         path = "/home/developer/projects/final_project/python_scripts/JSON/"
+    elif process == "JSON_to_elastic":
+        container = "python_scripts"
+        python_path = "/usr/local/bin/python3.13"
+        path = "/home/developer/projects/final_project/python_scripts/JSON/"
     else:
         raise ValueError("Invalid process name")
     

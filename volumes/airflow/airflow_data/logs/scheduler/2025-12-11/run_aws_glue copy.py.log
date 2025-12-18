@@ -1,7 +1,0 @@
-[2025-12-11T16:24:23.605+0200] {processor.py:161} INFO - Started process (PID=1964) to work on /opt/airflow/dags/run_aws_glue copy.py
-[2025-12-11T16:24:23.606+0200] {processor.py:830} INFO - Processing file /opt/airflow/dags/run_aws_glue copy.py for tasks to queue
-[2025-12-11T16:24:23.607+0200] {logging_mixin.py:188} INFO - [2025-12-11T16:24:23.607+0200] {dagbag.py:540} INFO - Filling up the DagBag from /opt/airflow/dags/run_aws_glue copy.py
-[2025-12-11T16:24:23.631+0200] {processor.py:840} INFO - DAG(s) 'run_aws_glue' retrieved from /opt/airflow/dags/run_aws_glue copy.py
-[2025-12-11T16:24:24.918+0200] {logging_mixin.py:188} INFO - [2025-12-11T16:24:24.918+0200] {dag.py:3047} INFO - Sync 1 DAGs
-[2025-12-11T16:24:24.929+0200] {logging_mixin.py:188} INFO - [2025-12-11T16:24:24.929+0200] {dag.py:3834} INFO - Setting next_dagrun for run_aws_glue to None, run_after=None
-[2025-12-11T16:24:24.955+0200] {processor.py:183} INFO - Processing /opt/airflow/dags/run_aws_glue copy.py took 1.353 seconds
