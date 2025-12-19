@@ -1,6 +1,14 @@
-version: '3.2'
-
 # docker compose up airflow-init
+
+#Start >>> Unified environment anchor (AWS + TZ)
+x-env-common:
+  &env-common
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+  TZ: ${TZ:-Asia/Jerusalem}
+#End >>> Unified environment anchor (AWS + TZ)
+
 x-airflow-common:
   &airflow-common
   image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.8.4}
@@ -15,26 +23,19 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false' #True = Show example DAGs in Airflow UI
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-        # yamllint disable rule:line-length
-        # Use simple http server on scheduler for health checks
-        # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
-        # yamllint enable rule:line-length
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-        # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
-        # for other purpose (development, test and especially production usage) build/extend Airflow image.
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:- apache-airflow apache-airflow-providers-microsoft-mssql apache-airflow-providers-snowflake sqlglot pandas snowflake-sqlalchemy==1.5.1 pymssql==2.2.11 apache-airflow-providers-microsoft-mssql kafka-python}
-    
+    # _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:- apache-airflow apache-airflow-providers-microsoft-mssql apache-airflow-providers-snowflake sqlglot pandas snowflake-sqlalchemy==1.5.1 pymssql==2.2.11 apache-airflow-providers-microsoft-mssql kafka-python}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY} #Added for Airflow security by Rotem Reich
+
     #Start >>> Rotem Reich: AWS environment variables
-    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
-    TZ: ${TZ:-Asia/Jerusalem}
+    <<: *env-common
     AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Jerusalem
     #End >>> Rotem Reich: AWS environment variables
 
   volumes:
     - ./volumes/airflow/airflow_data/dags:/opt/airflow/dags
     # - ./volumes/airflow/airflow_data/logs:/opt/airflow/logs
+    # - airflow-logs-volume:/sources/logs
     - ./volumes/airflow/airflow_data/config:/opt/airflow/config
     - ./volumes/airflow/airflow_data/plugins:/opt/airflow/plugins
     - /var/run/docker.sock:/var/run/docker.sock #Rotem Reich: Expose Docker socket on windows
@@ -47,15 +48,6 @@ x-airflow-common:
     postgres:
       condition: service_healthy
 
-#Start >>> Unified environment anchor (AWS + TZ)
-x-env-common:
-  &env-common
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
-  TZ: ${TZ:-Asia/Jerusalem}
-#End >>> Unified environment anchor (AWS + TZ)
-
 services:
 
     zookeeper:
@@ -63,27 +55,6 @@ services:
         image: wurstmeister/zookeeper:latest
         ports:
             - "2181:2181"
-
-    # course-kafka:
-    #     container_name: course-kafka
-    #     image: wurstmeister/kafka:2.13-2.8.1
-    #     environment:
-    #         KAFKA_ADVERTISED_HOST_NAME: course-kafka
-    #         KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-    #     ports:
-    #         - "9092:9092"
-    #     depends_on:
-    #         - zookeeper
-
-    # kafdrop:
-    #     container_name: kafdrop
-    #     image: obsidiandynamics/kafdrop:3.30.0
-    #     ports:
-    #         - "9003:9000"
-    #     environment:
-    #         - KAFKA_BROKERCONNECT=course-kafka:9092
-    #     depends_on:
-    #         - course-kafka
             
     mariadb:
         container_name: mariadb
@@ -138,18 +109,6 @@ services:
         volumes:
             - "./volumes/requirements:/home/requirements/"
             - "./volumes/Python_Scripts:/home/developer/final_project/"
-        
-    # mongo:
-    #     image: nayacollege/mongo:1.0
-    #     container_name: mongo
-    #     ports:
-    #         - "27017:27017"
-            
-    # nifi:
-    #     image: nayacollege/nifi:1.0
-    #     container_name: nifi
-    #     ports:
-    #         - "8080:8080"
             
     # elasticsearch:
     #     container_name: elasticsearch
@@ -359,4 +318,5 @@ services:
         - airflow
 
 # volumes:
+#   airflow-logs-volume:
 #   postgres-db-volume:

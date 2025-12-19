@@ -84,8 +84,8 @@ class SparkLoader:
         chains_df = self.spark.read.csv(s3_chains_path, header=True, inferSchema=True)
         # print(">>>>>>Chains.csv:")
         # chains_df.show(10, truncate=False)
-        
-        # join chain names
+
+        # drop coupon & join chain names
         df_spark = (
             df_spark
             .withColumn("src", F.input_file_name())
@@ -100,6 +100,7 @@ class SparkLoader:
         
         # store for downstream methods
         if df == "PromoFull":
+            df_spark = df_spark.where(~F.col("PromotionDescription").contains("קופון"))
             self.df_PromoFull = df_spark
             # print(">>>>>>self.df_PromoFull:")
             # self.df_PromoFull.show(5, truncate=False)
@@ -138,9 +139,11 @@ class SparkLoader:
             
             df_PromotionDetails = (
                 df_PromotionDetails
+                .where(~F.col("PromotionDescription").contains("קופון"))
                 .withColumn("DiscountRate_calc",
                             F.when(F.col("DiscountRate")>=100, F.col("DiscountRate")/10000)
                             .when(F.col("DiscountRate")<0, F.lit(None))
+                            .when((F.col("DiscountRate")==1) & (F.col("PromotionDescription").contains("+")), F.col("DiscountRate")/F.col("MinQty"))
                             .otherwise(F.col("DiscountRate"))
                         .cast(T.DoubleType())
                 )

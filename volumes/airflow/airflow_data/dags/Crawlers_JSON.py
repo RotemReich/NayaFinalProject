@@ -33,13 +33,8 @@ def Crawlers_JSON():
         Base.run_command("JSON_to_elastic.py", "JSON_to_elastic")
 
     (
-        run_crawler_promotiondetails()
+        [run_crawler_promotiondetails(), run_crawler_promotionitems(), run_crawler_stores()]
         >>
-        run_crawler_promotionitems()
-        >>
-        run_crawler_stores()
-        >>
-        # delete_json() >> run_glue_job_JSON()
         run_spark_JSON()
         >>
         json_to_elastic()
