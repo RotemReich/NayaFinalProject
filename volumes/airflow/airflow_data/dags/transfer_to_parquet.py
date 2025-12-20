@@ -1,5 +1,5 @@
 from airflow.decorators import dag, task
-import Base
+import dag_assist_functions as daf
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from datetime import datetime
 
@@ -16,45 +16,45 @@ def transfer_to_parquet():
     
     @task
     def load_shufersal_to_parquet():
-        Base.run_command("shufersal_load.py", "spark")
+        daf.run_command("shufersal_load.py", "spark")
     
     @task
     def wait_30_seconds_post_shufersal():
-        Base.wait_command(30)
+        daf.wait_command(30)
 
     @task
     def load_carrefour_to_parquet():
-        Base.run_command("carrefour_load.py", "spark")
-    
+        daf.run_command("carrefour_load.py", "spark")
+
     @task
     def wait_30_seconds_post_carrefour():
-        Base.wait_command(30)
+        daf.wait_command(30)
 
     @task
     def load_ramilevi_to_parquet():
-        Base.run_command("ramilevi_load.py", "spark")
+        daf.run_command("ramilevi_load.py", "spark")
 
     @task
     def wait_30_seconds_post_ramilevi():
-        Base.wait_command(30)
+        daf.wait_command(30)
 
     @task
     def load_victory_to_parquet():
-        Base.run_command("victory_load.py", "spark")
+        daf.run_command("victory_load.py", "spark")
 
     @task
     def wait_30_seconds_post_victory():
-        Base.wait_command(30)
-    
+        daf.wait_command(30)
+
     @task
     def load_mahsaneihashuk_to_parquet():
-        Base.run_command("mahsaneihashuk_load.py", "spark")
+        daf.run_command("mahsaneihashuk_load.py", "spark")
 
     @task
     def wait_30_seconds_post_mahsaneihashuk():
-        Base.wait_command(30)
+        daf.wait_command(30)
 
-    Base.ensure_dag_unpaused("Crawlers_JSON")
+    daf.ensure_dag_unpaused("Crawlers_JSON")
     Crawlers_JSON_dag = TriggerDagRunOperator(
         task_id="Crawlers_JSON",
         trigger_dag_id="Crawlers_JSON",

@@ -34,7 +34,7 @@ x-airflow-common:
 
   volumes:
     - ./volumes/airflow/airflow_data/dags:/opt/airflow/dags
-    # - ./volumes/airflow/airflow_data/logs:/opt/airflow/logs
+    - ./volumes/airflow/airflow_data/logs:/opt/airflow/logs
     # - airflow-logs-volume:/sources/logs
     - ./volumes/airflow/airflow_data/config:/opt/airflow/config
     - ./volumes/airflow/airflow_data/plugins:/opt/airflow/plugins

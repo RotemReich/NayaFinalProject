@@ -1,5 +1,5 @@
 from airflow.decorators import dag, task
-import Base
+import dag_assist_functions as daf
 from datetime import datetime
 
 
@@ -15,22 +15,22 @@ def Crawlers_JSON():
 
     @task
     def run_crawler_promotiondetails():
-        Base.run_command("glue_crawler_PromotionDetails.py", "glue")
+        daf.run_command("glue_crawler_PromotionDetails.py", "glue")
     @task
     def run_crawler_promotionitems():
-        Base.run_command("glue_crawler_PromotionItems.py", "glue")
-        
+        daf.run_command("glue_crawler_PromotionItems.py", "glue")
+
     @task
     def run_crawler_stores():
-        Base.run_command("glue_crawler_stores.py", "glue")
+        daf.run_command("glue_crawler_stores.py", "glue")
 
     @task
     def run_spark_JSON():
-        Base.run_command("JSON_Upload.py", "JSON")
-    
+        daf.run_command("JSON_Upload.py", "JSON")
+
     @task
     def json_to_elastic():
-        Base.run_command("JSON_to_elastic.py", "JSON_to_elastic")
+        daf.run_command("JSON_to_elastic.py", "JSON_to_elastic")
 
     (
         [run_crawler_promotiondetails(), run_crawler_promotionitems(), run_crawler_stores()]

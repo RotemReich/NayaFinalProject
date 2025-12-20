@@ -8,7 +8,7 @@ import requests
 import re
 import time
 import io
-import Functions as fn
+import Files_Assist_Functions as fn
 
 BASE_URL = "https://shop.hazi-hinam.co.il/Prices"
 

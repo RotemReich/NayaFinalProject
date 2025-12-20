@@ -1,24 +1,30 @@
+import os
 import requests
 import re
 import time
 import argparse
 from urllib.parse import urljoin
-import Functions as fn
-    
+import Files_Assist_Functions as fn
 
 BASE_URL = "https://prices.carrefour.co.il/"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 }
 
-date_prefix = fn.get_date_prefix()
-today = fn.date_str
+date_prefix = fn.get_date(dash=True)
+today = fn.get_date()
 
 S3_BUCKET = fn.get_bucket_name()
 s3 = fn.get_s3()
 chains = fn.get_chains(s3)
 search_word = "PriceFull"
 
+# Setup logging
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+datetime_str = fn.get_datetime()
+log_file = f"{script_name}_{datetime_str}.log"
+logger = fn.setup_logger(log_file)
+logger.info(f"Starting Carrefour {search_word} script.")
 
 def extract_pricefull_files(html_content):
     files = {}
@@ -48,7 +54,7 @@ def upload_to_s3(url, s3_key):
         s3.upload_fileobj(response.raw, S3_BUCKET, s3_key)
         return True
     except Exception as e:
-        print(f"Failed to upload from {url} to S3: {e}")
+        logger.error(f"Failed to upload from {url} to S3: {e}")
         return False
 
 def main(dry_run=False):
@@ -57,48 +63,62 @@ def main(dry_run=False):
     all_files = {}
     try:
         response = session.get(BASE_URL, headers=HEADERS, timeout=15)
-        # print("\n\n>>>>>>>>>>>>>response: \n", response)
+        logger.info(f"Fetched BASE_URL: {BASE_URL} (status {response.status_code})")
         response.raise_for_status()
         html_content = response.text
         current_files = extract_pricefull_files(html_content)
         for file_info in current_files:
             all_files[file_info["filename"]] = file_info      
         if not all_files:
+            logger.warning("No files found to process.")
             return
         
         if dry_run:
             for i, (filename, file_info) in enumerate(all_files.items(), 1):
-                print(f"[{i}/{len(all_files)}] {filename} -> {file_info['url']}")
+                logger.info(f"[DRY RUN] [{i}/{len(all_files)}] {filename} -> {file_info['url']}")
             return
         
-        print("Uploading files to S3...")
+        logger.info("Uploading files to S3...")
         uploaded = 0
         upload_failed = 0
         for i, (filename, file_info) in enumerate(all_files.items(), 1):
             chain_id = file_info["chain_id"]
             chain_name = fn.get_chain_name(chain_id, chains)
             branch_id = file_info["branch_id"]
-            s3_key = f"{date_prefix}{search_word}/{chain_name}/{branch_id}/{filename}"
+            s3_key = f"{date_prefix}/{search_word}/{chain_name}/{branch_id}/{filename}"
             # Upload directly from the internet
             if upload_to_s3(file_info["url"], s3_key):
                 uploaded += 1
+                logger.info(f"Uploaded: {filename} to {s3_key}")
             else:
                 upload_failed += 1
-            if uploaded % 10 == 0:
-                print(f">>> Uploaded {uploaded} files so far...")
+                logger.error(f"Failed to upload: {filename} to {s3_key}")
+            # if uploaded % 10 == 0:
+            #     logger.info(f"Uploaded {uploaded} files so far...")
             time.sleep(0.3)
         
         # Summary
-        print("\n" + "="*70)
-        print(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
-        print(f">>>>>>>✔ Total uploaded files: {uploaded}")
-        print(f"  Failed uploads: {upload_failed}")
-        print("="*70)
+        logger.info(f"All files uploaded to S3 {S3_BUCKET} bucket!")
+        logger.info(f"Total uploaded files: {uploaded}")
+        logger.info(f"Failed uploads: {upload_failed}")
 
-    except Exception:
-        pass
+        # Upload log file to S3
+        if uploaded > 0 or upload_failed > 0:
+            log_s3_key = f"logs/{date_prefix}/{log_file}"
+            fn.upload_file_to_s3(log_file, log_s3_key, s3)  # This will upload the local log file
+
+
+    except Exception as e:
+        logger.exception(f"Exception occurred: {e}")
+    
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception as e:
+            print(f"Error occurred while closing session: {e}")
+        
+        # Remove local log file
+        fn.remove_local_file(log_file)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"Carrefour {search_word} downloader")

@@ -1,3 +1,4 @@
+import os
 import time
 import requests
 from selenium import webdriver
@@ -10,7 +11,7 @@ from selenium.common.exceptions import StaleElementReferenceException
 import io
 import re
 import urllib3
-import Functions as fn
+import Files_Assist_Functions as fn
 
 # Suppress only the single InsecureRequestWarning from urllib3 needed.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -35,12 +36,18 @@ driver = webdriver.Chrome(options=chrome_options)
 # === AWS Credentials ===
 # Use environment variables injected by Docker Compose. Do NOT hardcode secrets.
 S3_BUCKET = fn.get_bucket_name()
-date_prefix = fn.get_date_prefix()
+date_prefix = fn.get_date(dash=True)
 
-date_str = time.strftime("%Y%m%d")
+date_str = fn.get_date()
 search_word = "PriceFull"
 pattern = rf".*{search_word}(\d+)-(\d{{3}})-{date_str}.*?\.gz$"
 
+# Setup logging
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+datetime_str = fn.get_datetime()
+log_file = f"{script_name}_{datetime_str}.log"
+logger = fn.setup_logger(log_file)
+logger.info(f"Starting Rami-Levi {search_word} script.")
 
 try:
     # Open login page
@@ -95,7 +102,7 @@ try:
                 break
             time.sleep(0.5)
     except Exception as e:
-        print("Search filter not applied:", e)
+        logger.error("Search filter not applied:", e)
 
     # Scrape filtered .gz links from the file table specifically
     gz_links = []
@@ -117,19 +124,19 @@ try:
                     if href:
                         gz_links.append(href)
     except Exception as e:
-        print("Failed to read table rows:", e)
+        logger.error("Failed to read table rows:", e)
 
     # De-duplicate
     gz_links = list({h for h in gz_links})
-    print(f'Found {len(gz_links)} files after filter "{search_word}".')
-    
+    logger.info(f'Found {len(gz_links)} files after filter "{search_word}".')
+
     # Copy cookies ONCE and close the browser before downloads to prevent invalid session id
     cookie_jar = requests.cookies.RequestsCookieJar()
     try:
         for cookie in driver.get_cookies():
             cookie_jar.set(cookie['name'], cookie['value'], domain=cookie.get('domain'), path=cookie.get('path'))
     except Exception as e:
-        print(f"Warning: could not extract cookies: {e}")
+        logger.warning(f"Warning: could not extract cookies: {e}")
     finally:
         try:
             driver.quit()
@@ -178,7 +185,7 @@ try:
         chain_id = m.group(1)
         chain_name = fn.get_chain_name(chain_id, chains)
         branch_id = m.group(2)
-        s3_key = f"{date_prefix}{search_word}/{chain_name}/{branch_id}/{filename}"
+        s3_key = f"{date_prefix}/{search_word}/{chain_name}/{branch_id}/{filename}"
 
         #== Upload to S3
         try:
@@ -186,7 +193,7 @@ try:
             # Skip HTML responses (auth pages, errors)
             ct = (r.headers.get("Content-Type") or "").lower()
             if "text/html" in ct:
-                print(f"Skip HTML response for {filename} (Content-Type: {ct})")
+                logger.info(f"Skip HTML response for {filename} (Content-Type: {ct})")
                 skipped += 1
                 # Drain to release connection
                 try:
@@ -211,17 +218,25 @@ try:
             # Do not set ContentEncoding unless you want S3 to auto-decompress on download; keep raw bytes
             s3.upload_fileobj(buf, S3_BUCKET, s3_key, ExtraArgs=extra)
             counter += 1
+            logger.info(f"Uploaded {filename} to {s3_key}")
         except Exception as e:
-            print(f"Failed to upload {filename}: {e}")
+            logger.error(f"Failed to upload {filename}: {e}")
 finally:
-    print("\n" + "="*70)
-    print(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
-    print(f">>>>>>>✔ Total uploaded files: {counter}")
-    print(f">>>>>>>✔ Total skipped files: {skipped}")
-    print("="*70)
+    logger.info(f">>>>>>>✔ All files uploaded to S3 {S3_BUCKET} bucket!")
+    logger.info(f">>>>>>>✔ Total uploaded files: {counter}")
+    logger.info(f">>>>>>>✔ Total skipped files: {skipped}")
     
+    #=== Upload log file to S3 ===
+    if counter > 0 or skipped > 0:
+        # Upload log file to S3
+        log_s3_key = f"logs/{date_prefix}/{log_file}"
+        fn.upload_file_to_s3(log_file, log_s3_key, s3)  # This will upload the local log file
+        
+    # Remove local log file
+    fn.remove_local_file(log_file)
+
     try:
         if 'driver' in locals() and driver is not None:
             driver.quit()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error occurred while quitting driver: {e}")

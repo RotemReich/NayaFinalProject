@@ -1,1 +1,2 @@
 .env
+volumes/airflow/airflow_data/logs/

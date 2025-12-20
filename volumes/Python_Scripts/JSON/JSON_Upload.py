@@ -21,13 +21,6 @@ spark = (
     .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.1")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
     .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2")
-    # Remove ManifestCommitter configs to avoid CNF; use defaults
-    # .config("spark.hadoop.mapreduce.outputcommitter.factory.class", "org.apache.hadoop.mapreduce.lib.output.committer.ManifestCommitterFactory")
-    # .config("spark.hadoop.fs.s3a.committer.enable", "true")
-    # .config("spark.hadoop.fs.s3a.committer.name", "directory")
-    # .config("spark.hadoop.fs.s3a.committer.magic.enabled", "false")
-    # .config("spark.hadoop.fs.s3a.committer.staging.conflict-mode", "replace")
-    # .config("spark.hadoop.fs.s3a.committer.staging.tmp.path", "/tmp/s3a-staging")
     .config("spark.sql.files.ignoreMissingFiles", "true")
     .config("spark.hadoop.fs.s3a.fast.upload", "true")
     .config("spark.hadoop.fs.s3a.access.key", AWS_ACCESS_KEY_ID)

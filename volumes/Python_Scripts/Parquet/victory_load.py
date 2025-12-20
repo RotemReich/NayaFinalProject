@@ -1,4 +1,4 @@
-import SparkLoader_Class as SC
+import Spark_Load_Parquet as SC
 import pyspark.sql.types as T
 
 promo_schema = T.StructType([
