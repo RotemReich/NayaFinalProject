@@ -1,5 +1,3 @@
-# docker compose up airflow-init
-
 #Start >>> Unified environment anchor (AWS + TZ)
 x-env-common:
   &env-common
@@ -300,8 +298,6 @@ services:
         _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
         _PIP_ADDITIONAL_REQUIREMENTS: ''
       user: "0:0"
-      # volumes:
-      #   - ./volumes/airflow/airflow_data/:/sources
 
     airflow-cli:
       container_name: airflow-cli
