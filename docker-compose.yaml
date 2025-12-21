@@ -108,23 +108,23 @@ services:
             - "./volumes/requirements:/home/requirements/"
             - "./volumes/Python_Scripts:/home/developer/final_project/"
             
-    # elasticsearch:
-    #     container_name: elasticsearch
-    #     image: docker.elastic.co/elasticsearch/elasticsearch:7.13.2
-    #     ports:
-    #         - "9200:9200"
-    #     environment:
-    #         discovery.type: single-node
-    #     volumes:
-    #         - ./volumes/elasticsearch/data:/usr/share/elasticsearch/data
+    elasticsearch:
+        container_name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.13.2
+        ports:
+            - "9200:9200"
+        environment:
+            discovery.type: single-node
+        volumes:
+            - ./volumes/elasticsearch/data:/usr/share/elasticsearch/data
             
-    # kibana:
-    #     container_name: kibana
-    #     image: docker.elastic.co/kibana/kibana:7.13.2
-    #     ports:
-    #         - "5601:5601"
-    #     depends_on:
-    #         - elasticsearch
+    kibana:
+        container_name: kibana
+        image: docker.elastic.co/kibana/kibana:7.13.2
+        ports:
+            - "5601:5601"
+        depends_on:
+            - elasticsearch
             
     postgres:
         container_name: postgres

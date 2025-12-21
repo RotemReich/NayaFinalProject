@@ -30,7 +30,7 @@ def Crawlers_JSON():
 
     @task
     def json_to_elastic():
-        daf.run_command("JSON_to_elastic.py", "JSON_to_elastic")
+        daf.run_command("s3_to_elastic_v2.py", "JSON_to_elastic")
 
     (
         [run_crawler_promotiondetails(), run_crawler_promotionitems(), run_crawler_stores()]
